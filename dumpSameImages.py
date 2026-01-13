@@ -9,9 +9,6 @@ import Decorator as D
 import Utility as U
 import utility as u
 
-# ZeroPHash = np.array([[0, 0, 0, 0, 0, 0, 0, 0]], dtype=np.uint8)
-# PHO = cv2.img_hash.PHash().create()
-
 
 def getFiles(path, targetPath, extensions=None):
   if extensions is None:
@@ -27,18 +24,11 @@ def getFiles(path, targetPath, extensions=None):
 
 
 def setInfo(data):
-  # with data["path"].open("rb") as f:
-  #   check_chars = f.read()[-2:]
-  # if check_chars != b"\xff\xd9":
-  #   print("Not complete image")
-  #   print(data)
-
   image = u.readImage(data["path"])
   if image is None:
     return False, data
   data["shape"] = image.shape
   data["pHash"] = cv2.img_hash.pHash(image)
-  # data["sortKey"] = PHO.compare(ZeroPHash, ph)
   return True, data
 
 
@@ -51,46 +41,6 @@ def setInfoAll(lt, ex, fails):
       lt.remove(data)
 
 
-# @D.printFuncInfo()
-# def dumpSameImagesSingle(directory, pm, failPath, target=None):
-#   if target is not None:
-#     targets = u.getFiles(target, isRecurse=True, extensions=[".jpg", ".png", ".webp"])
-#     files = u.getFiles(directory, isRecurse=True, extensions=[".jpg", ".png", ".webp"])
-#     files = u.subList(files, targets)
-#   else:
-#     targets = u.getFiles(directory, isRecurse=True, extensions=[".jpg", ".png", ".webp"])
-#     files = targets
-
-#   fails = []
-#   while len(targets) > 0:
-#     target = targets.pop()
-#     success, targetImage = setInfo(target)
-#     if not success:
-#       fails.append(target["path"])
-
-#     U.printTime(f"{len(files):5}: {target['path']!s}")
-#     sames = [target]
-
-#     for other in files[:]:
-#       success, otherImage = setInfo(other)
-#       if not success:
-#         fails.append(other["path"])
-#         files.remove(other)
-#         continue
-#       isSame, diff = u.isSameImage(targetImage, target["pHash"], otherImage, other["pHash"])
-#       if isSame:
-#         files.remove(other)
-#         other["diff"] = diff
-#         U.delKeys(other, ["pHash"])
-#         sames.append(other)
-#     U.delKeys(target, ["pHash"])
-#     if len(sames) > 1:
-#       pm.dump(sames)
-#   U.customPrint(fails)
-#   if len(fails) > 1:
-#     u.dump(failPath, fails)
-
-
 def dump(pm, obj, lock):
   with lock:
     pm.dump(obj)
@@ -98,15 +48,12 @@ def dump(pm, obj, lock):
 
 def check(result, sames, others, fails):
   isSame, diff, other = result
-  # print(isSame, diff, other["path"])
   if isSame:
-    # u.remove(others, "path", other["path"])
     others.remove(other)
     other["diff"] = diff
     U.delKeys(other, ["pHash"])
     sames.append(other)
   elif diff is None:
-    # u.remove(others, "path", other["path"])
     others.remove(other)
     fails.append(other["path"])
 
@@ -121,11 +68,8 @@ def dumpSameImages(path, pickleOutput, failedPath, targetPath=None):
   fails = []
   with cf.ThreadPoolExecutor() as ex:
     setInfoAll(targets, ex, fails)
-    # targets.sort(key=lambda x: x["sortKey"])
-    # U.customPrint(targets)
     if targetPath is not None:
       setInfoAll(others, ex, fails)
-      # others.sort(key=lambda x: x["sortKey"])
     while len(targets) > 0:
       target = targets.pop()
       target["target"] = True
@@ -137,7 +81,6 @@ def dumpSameImages(path, pickleOutput, failedPath, targetPath=None):
       U.delKeys(target, ["pHash"])
       if len(sames) > 1:
         ex.submit(dump, pm, sames, lock)
-        # pm.dump(sames)
   print()
   if len(fails) > 1:
     U.customPrint(fails)

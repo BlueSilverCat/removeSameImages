@@ -250,7 +250,6 @@ class CanvasWindow(tk.Canvas):
 
   def openImage(self, path):
     image = Image.open(path["path"])
-    # image = Image.open(Path(self.master.directory, path["path"]))
     return u.resizeImage(image, *self.thumbnailSize)
 
   def openImages(self, data):
@@ -400,7 +399,6 @@ class SameImageViewer(ttk.Frame):
     # TSpinbox
     # TButton
     # Checkbutton
-
     self.style = ttk.Style()
     self.font = ("fixed", 16)
     self.style.theme_use("clam")
@@ -450,32 +448,7 @@ class SameImageViewer(ttk.Frame):
     self.bind_all("<KeyPress-0>", lambda _event: self.frameCommand.buttonExplorer.invoke())
     self.bind_all("<KeyPress-z>", self.undo)
 
-  def getAllWidgetInfo(self):
-    names = [
-      # "buttonAssort",
-      # "buttonClose",
-      # "buttonMinimize",
-      # "buttonPerform",
-      "canvasWindow",
-      "frameCommand",
-      # "frameTitle",
-      # "frameWindow",
-      # "labelDirectory",
-      # "labelRemainCount",
-      # "labelTargetCount",
-      "scrollbar",
-    ]
-    for name in names:
-      widget = getattr(self, name)
-      widget.update()
-      size = (widget.winfo_width(), widget.winfo_height())
-      coordinate = (widget.winfo_x(), widget.winfo_y())
-      style = widget.winfo_class()
-    self.master.update()
-    self.update()
-
   def onOverRidereDirect(self, _event):
-    # if self.master.state() in ["normal", "zoomed"]:
     if self.master.state() == "normal":
       self.master.wm_overrideredirect(True)
 
