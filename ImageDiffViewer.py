@@ -5,9 +5,8 @@ import pathlib
 import tkinter as tk
 from tkinter import ttk
 
-import Decorator as D
 import WindowsApi as WinApi
-from PIL import Image, ImageChops, ImageTk
+from PIL import Image, ImageTk
 
 import Utility as U
 import utility as u
