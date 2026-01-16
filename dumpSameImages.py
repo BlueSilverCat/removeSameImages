@@ -103,12 +103,10 @@ def argumentParser():
 
 if __name__ == "__main__":
   path, picklePath, failedPath, targetPath, threshold = argumentParser()
-  print(
-    f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"'
-  )
+  print(f'directory:  "{path}"\nthreshold:   {threshold}')
+  print(f'picklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
 
   dumpSameImages(path, picklePath, failedPath, targetPath, threshold)
   rsip.printSameImagePickle(picklePath)
-  print(
-    f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"'
-  )
+  print(f'directory:  "{path}"\nthreshold:   {threshold}')
+  print(f'picklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
