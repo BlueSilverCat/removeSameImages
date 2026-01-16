@@ -1,8 +1,6 @@
 import argparse
 import concurrent.futures as cf
 import functools
-import itertools
-import math
 import shutil
 import subprocess
 import tkinter as tk
@@ -12,55 +10,9 @@ from tkinter import ttk
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
+import ImageDiffViewer
 import Utility as U
 import utility as u
-
-
-def factor(x):
-  if x == 1:
-    return [1]
-  result = []
-  for n in range(2, x + 1):
-    if x < n:
-      return result
-    while x % n == 0:
-      result.append(n)
-      x //= n
-  return result
-
-
-def getFactorPairs(lt, n):
-  if n > len(lt):
-    return []
-  result = []
-  comb = itertools.combinations(lt, r=n)
-  for x in comb:
-    other = lt.copy()
-    for y in x:
-      other.remove(y)
-    data = sorted([math.prod(x), math.prod(other)])
-    if data not in result:
-      result.append(data)
-  return result
-
-
-def getAllFactorPairs(fts):
-  l = max(2, len(fts))
-  result = []
-  for i in range(1, l // 2 + 1):
-    data = getFactorPairs(fts, i)
-    if data not in result:
-      result.extend(data)
-  return sorted(result)
-
-
-def getMinFactorPair(n):
-  fts = factor(n)
-  while n > 2 and len(fts) == 1:  # 素数はペアにならないので避ける
-    n += 1
-    fts = factor(n)
-  result = getAllFactorPairs(fts)
-  return result[-1]
 
 
 class FrameTitle(ttk.Frame):
@@ -178,6 +130,20 @@ class FrameCommand(ttk.Frame):
       command=self.master.draw,
     )
 
+    self.comboboxColor = ttk.Combobox(
+      self,
+      values=["black", "white", "red", "green", "blue", "cyan", "magenta", "yellow", ""],
+      textvariable=self.master.svColor,
+      width=8,
+    )
+    self.comboboxColor.bind("<<ComboboxSelected>>", self.master.draw)
+    self.buttonImageDiffViewer = ttk.Button(
+      self,
+      text="imageDiffViewer",
+      command=self.master.callImageDiffViewer,
+      style="front.TButton",
+    )
+
     self.buttonExplorer.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.buttonUndo.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelRecordCount.pack(side=tk.RIGHT, fill=tk.BOTH)
@@ -190,6 +156,9 @@ class FrameCommand(ttk.Frame):
     self.spinboxRow.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelRow.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelTargetCount.pack(side=tk.RIGHT, fill=tk.BOTH)
+
+    self.comboboxColor.pack(side=tk.LEFT, fill=tk.BOTH)
+    self.buttonImageDiffViewer.pack(side=tk.LEFT, fill=tk.BOTH)
 
 
 class CanvasWindow(tk.Canvas):
@@ -258,15 +227,13 @@ class CanvasWindow(tk.Canvas):
       return list(results)
 
   def createCanvas(self, i, row, column, data, image, dataIndex):
-    frame = ttk.Frame(self.frameWindow)
-    canvas = tk.Canvas(frame, width=self.thumbnailSize[0], height=self.thumbnailSize[1], bg="gray80")
+    canvas = tk.Canvas(self.frameWindow, width=self.thumbnailSize[0], height=self.thumbnailSize[1], bg="gray80")
     checkValue = tk.BooleanVar(value=False)
     canvas.bind("<Button-1>", lambda _event: self.setTarget(checkValue, dataIndex, i, True))
-    parent = U.subPath(self.master.directory, data["path"].parent)
+    parent = data["path"].parent.relative_to(self.master.directory)
 
-    checkbutton = tk.Checkbutton(
-      frame,
-      text=f"{parent}\n{data['path'].name}\n{data['shape']}\n{data.get('diff', '')}",
+    checkbutton = ttk.Checkbutton(
+      canvas,
       variable=checkValue,
       onvalue=True,
       offvalue=False,
@@ -274,24 +241,24 @@ class CanvasWindow(tk.Canvas):
     )
     image = ImageTk.PhotoImage(image, master=canvas)
     self.thumbnails.append(image)
-
     canvas.create_image(self.thumbnailSize[0] // 2, self.thumbnailSize[1] // 2, image=image, anchor=tk.CENTER)
-    frame.place(
+    canvas.create_text(
+      5,
+      30,
+      text=f"{parent}\n{data['path'].name}\n{data['shape']}\n{data.get('diff', '')}",
+      anchor=tk.NW,
+      font=("fixed", 14, "bold"),
+      fill=self.master.svColor.get(),
+    )
+    canvas.place(
       anchor=tk.NW,
       x=column * self.thumbnailSize[0],
       y=row * self.thumbnailSize[1],
       width=self.thumbnailSize[0],
       height=self.thumbnailSize[1],
     )
-    canvas.place(
-      anchor=tk.NW,
-      x=0,
-      y=0,
-      width=self.thumbnailSize[0],
-      height=self.thumbnailSize[1],
-    )
-    checkbutton.grid(row=0, column=0)
-    self.widgets.append((frame, canvas, checkbutton))
+    checkbutton.place(x=2, y=2, anchor=tk.NW)
+    self.widgets.append((canvas, checkbutton))
 
   def setTarget(self, checkValue, indexData, index, fromCanvas=False):
     checked = checkValue.get()
@@ -318,7 +285,6 @@ class SameImageViewer(ttk.Frame):
     self.resolution = WinApi.getDisplaysResolution()[0]  # (width, height)
     self.config(width=self.resolution[0], height=self.resolution[1])
     self.master.geometry(u.toGeometry(self.resolution[0], self.resolution[1], 0, 0))
-    # self.master.state("zoomed")
     self.master.title("SameImageViewer")
     self.pack()
     self.master.wm_overrideredirect(True)
@@ -351,6 +317,8 @@ class SameImageViewer(ttk.Frame):
     self.svTargetCount = tk.StringVar(self)
     self.updateTargetCount()
     self.svRecordCount = tk.StringVar(self)
+    self.svColor = tk.StringVar(self)
+    self.svColor.set("red")
 
     self.ivRow = tk.IntVar(self, 2)
     self.ivColumn = tk.IntVar(self, 2)
@@ -389,18 +357,14 @@ class SameImageViewer(ttk.Frame):
       height=self.resolution[1] - (frameCommandHeight + titleBarHeight),
     )
     self.canvasWindow.configure(scrollregion=(0, 0, 0, self.resolution[1] - (frameCommandHeight + titleBarHeight)))
-    self.getAllWidgetInfo()
+    self.master.wm_attributes("-transparentcolor", "gray")
     self.setBind()
+    self.liftTop()
     self.draw(True)
 
   def setStyle(self):
-    # TFrame
-    # TScrollbar
-    # TSpinbox
-    # TButton
-    # Checkbutton
     self.style = ttk.Style()
-    self.font = ("fixed", 16)
+    self.font = ("BIZ UDゴシック", 16)
     self.style.theme_use("clam")
     self.style.configure("TLabel", background="light cyan", font=self.font)
     self.style.configure("front.TLabel", background="turquoise", font=("", 16, "bold"))
@@ -409,7 +373,6 @@ class SameImageViewer(ttk.Frame):
       "front.TButton",
       background=[
         ("pressed", "blue"),
-        ("active", "cyan"),
         ("!disabled", "light sky blue"),
       ],
       relief=[
@@ -431,22 +394,26 @@ class SameImageViewer(ttk.Frame):
     )
 
   def setBind(self):
-    self.bind_all("<Configure>", self.onOverRidereDirect)
-    self.bind_all("<KeyPress-Escape>", lambda _event: self.frameTitle.buttonClose.invoke())
-    self.bind_all("<MouseWheel>", self.scroll)
-    self.bind_all("<KeyPress-Return>", lambda _event: self.frameCommand.buttonPerform.invoke())
-    self.bind_all("<KeyPress-7>", lambda event: self.changeRow(event, 1))
-    self.bind_all("<KeyPress-4>", lambda event: self.changeRow(event, -1))
-    self.bind_all("<KeyPress-9>", lambda event: self.changeColumn(event, 1))
-    self.bind_all("<KeyPress-6>", lambda event: self.changeColumn(event, -1))
-    self.bind_all("<KeyPress-Down>", lambda _event: self.frameTitle.buttonMinimize.invoke())
-    self.bind_all("<KeyPress-2>", lambda _event: self.frameTitle.buttonMinimize.invoke())
-    self.bind_all("<KeyPress-Left>", lambda _event: self.frameCommand.buttonPrevious.invoke())
-    self.bind_all("<KeyPress-1>", lambda _event: self.frameCommand.buttonPrevious.invoke())
-    self.bind_all("<KeyPress-Right>", lambda _event: self.frameCommand.buttonNext.invoke())
-    self.bind_all("<KeyPress-3>", lambda _event: self.frameCommand.buttonNext.invoke())
-    self.bind_all("<KeyPress-0>", lambda _event: self.frameCommand.buttonExplorer.invoke())
-    self.bind_all("<KeyPress-z>", self.undo)
+    self.master.bind("<Configure>", self.onOverRidereDirect)
+    self.master.bind("<KeyPress-Escape>", lambda _event: self.frameTitle.buttonClose.invoke())
+    self.master.bind("<MouseWheel>", self.scroll)
+    self.master.bind("<KeyPress-Return>", lambda _event: self.frameCommand.buttonPerform.invoke())
+    self.master.bind("<KeyPress-7>", lambda event: self.changeRow(event, 1))
+    self.master.bind("<KeyPress-4>", lambda event: self.changeRow(event, -1))
+    self.master.bind("<KeyPress-9>", lambda event: self.changeColumn(event, 1))
+    self.master.bind("<KeyPress-6>", lambda event: self.changeColumn(event, -1))
+    self.master.bind("<KeyPress-Down>", lambda _event: self.frameTitle.buttonMinimize.invoke())
+    self.master.bind("<KeyPress-2>", lambda _event: self.frameTitle.buttonMinimize.invoke())
+    self.master.bind("<KeyPress-Left>", lambda _event: self.frameCommand.buttonPrevious.invoke())
+    self.master.bind("<KeyPress-1>", lambda _event: self.frameCommand.buttonPrevious.invoke())
+    self.master.bind("<KeyPress-Right>", lambda _event: self.frameCommand.buttonNext.invoke())
+    self.master.bind("<KeyPress-3>", lambda _event: self.frameCommand.buttonNext.invoke())
+    self.master.bind("<KeyPress-e>", lambda _event: self.frameCommand.buttonExplorer.invoke())
+    self.master.bind("<KeyPress-.>", lambda _event: self.frameCommand.buttonExplorer.invoke())
+    self.master.bind("<KeyPress-z>", self.undo)
+    self.master.bind("<KeyPress-->", self.undo)
+    self.master.bind("<KeyPress-d>", lambda _event: self.frameCommand.buttonImageDiffViewer.invoke())
+    self.master.bind("<KeyPress-0>", lambda _event: self.frameCommand.buttonImageDiffViewer.invoke())
 
   def onOverRidereDirect(self, _event):
     if self.master.state() == "normal":
@@ -502,7 +469,7 @@ class SameImageViewer(ttk.Frame):
       destination = Path(self.destination, source.name)
       destination = u.checkFileName(destination)
       self.record.append((self.data[indexData][indexFile], indexData, indexFile, destination))  # indexFileは要らない
-      print(f"{source!s}\n    -> {destination!s}")
+      print(f"Move:  {source!s}\n        -> {destination!s}")
       shutil.move(source, destination)
     self.targets = []
     self.updateTargetCount()
@@ -583,7 +550,7 @@ class SameImageViewer(ttk.Frame):
   def autoSetSize(self):
     if not self.isAutoSize:
       return
-    row, column = getMinFactorPair(self.countImage)
+    row, column = u.getMinFactorPair(self.countImage)
     if self.resolution[0] < self.resolution[1]:
       row, column = column, row
     self.ivRow.set(row)
@@ -596,13 +563,25 @@ class SameImageViewer(ttk.Frame):
       cmd = ["explorer", self.data[indexData][indexFile]["path"].parent]
       subprocess.Popen(cmd)
 
+  def liftTop(self):
+    self.master.attributes("-topmost", True)
+    self.master.attributes("-topmost", False)
+    self.focus_set()
+
+  def callImageDiffViewer(self, _event=None):
+    if len(self.targets) < 2:
+      return
+    self.ImageDiffViewerRoot = tk.Toplevel(self)
+    files = [self.data[indexData][indexFile]["path"] for indexData, indexFile in self.targets]
+    # self.imageDiffViewer = ImageDiffViewer.ImageDiffViewer(None, files, master=self.ImageDiffViewerRoot)
+    self.ImageDiffViewer = ImageDiffViewer.ImageDiffViewer(None, files, master=self.ImageDiffViewerRoot)
+
 
 def argumentParser():
   parser = argparse.ArgumentParser()
   parser.add_argument("dumpFile", type=Path)
   parser.add_argument("-o", "--outputPath", type=Path)
   parser.add_argument("-r", "--recordPath", type=Path)
-
   args = parser.parse_args()
   dumpFilePath = args.dumpFile.absolute()
   pm = U.PickleManager(dumpFilePath)
@@ -615,8 +594,10 @@ def argumentParser():
 
 if __name__ == "__main__":
   dumpFilePath, outputPath, recordPath = argumentParser()
-  print(f'dumpFilePath: "{dumpFilePath}"\noutputPath:  "{outputPath}"\nrecordPath:  "{recordPath}"')
+  print(f'dumpFilePath: "{dumpFilePath}"\noutputPath:   "{outputPath}"\nrecordPath:   "{recordPath}"')
   gui = SameImageViewer(dumpFilePath, outputPath, recordPath)
   gui.mainloop()
   gui.writeRecord()
-  print(f'dumpFilePath: "{dumpFilePath}"\noutputPath:  "{outputPath}"\nrecordPath:  "{recordPath}"')
+  print(f'dumpFilePath: "{dumpFilePath}"\noutputPath:   "{outputPath}"\nrecordPath:   "{recordPath}"')
+  u.callExplorer([outputPath])
+  u.callExplorer([recordPath])
