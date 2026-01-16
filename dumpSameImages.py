@@ -6,6 +6,7 @@ import threading
 import cv2
 import Decorator as D
 
+import readSameImagePickle as rsip
 import Utility as U
 import utility as u
 
@@ -58,8 +59,7 @@ def check(result, sames, others, fails):
     fails.append(other["path"])
 
 
-@D.printFuncInfo()
-def dumpSameImages(path, pickleOutput, failedPath, targetPath=None):
+def dumpSameImages(path, pickleOutput, failedPath, targetPath=None, threshold=9.0):
   pm = U.PickleManager(pickleOutput)
   pm.dump(path)
   targets, others = getFiles(path, targetPath)
@@ -76,7 +76,7 @@ def dumpSameImages(path, pickleOutput, failedPath, targetPath=None):
       sames = [target]
       print(f"\r\x1b[1M{len(others)}: {target['path'].parent.name} {target['path'].name}", end="")
       for other in others[:]:
-        r = u.isSameImage(target, other, phObj)
+        r = u.isSameImage(target, other, phObj, threshold)
         check(r, sames, others, fails)
       U.delKeys(target, ["pHash"])
       if len(sames) > 1:
@@ -93,21 +93,23 @@ def argumentParser():
   parser.add_argument("-t", "--targetPath", type=pathlib.Path, default=None)
   parser.add_argument("-o", "--outputPath", type=pathlib.Path, default=None)
   parser.add_argument("-f", "--failedPath", type=pathlib.Path, default=None)
+  parser.add_argument("-th", "--threshold", type=float, default=9.0)
   args = parser.parse_args()
   path = args.path.absolute()
   picklePath = pathlib.Path(path, f"pHash_{path.stem}.pkl") if args.outputPath is None else args.outputPath
   failedPath = pathlib.Path(path, f"failed_{path.stem}.pkl") if args.failedPath is None else args.failedPath
   targetPath = args.targetPath.absolute() if args.targetPath is not None else None
-  return (path, picklePath, failedPath, targetPath)
+  return (path, picklePath, failedPath, targetPath, args.threshold)
 
 
 if __name__ == "__main__":
-  path, picklePath, failedPath, targetPath = argumentParser()
-  print(f'directory:  "{path}"\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
+  path, picklePath, failedPath, targetPath, threshold = argumentParser()
+  print(
+    f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"'
+  )
 
-  dumpSameImages(path, picklePath, failedPath, targetPath)
-  pm = U.PickleManager(picklePath)
-  data = pm.loadExternal()
-  print(pm.count)
-  print(sum(map(len, data[1:])))
-  print(f'directory:  "{path}"\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
+  dumpSameImages(path, picklePath, failedPath, targetPath, threshold)
+  rsip.printSameImagePickle(picklePath)
+  print(
+    f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"'
+  )
