@@ -229,7 +229,7 @@ class CanvasWindow(tk.Canvas):
   def createCanvas(self, i, row, column, data, image, dataIndex):
     canvas = tk.Canvas(self.frameWindow, width=self.thumbnailSize[0], height=self.thumbnailSize[1], bg="gray80")
     checkValue = tk.BooleanVar(value=False)
-    canvas.bind("<Button-1>", lambda _event: self.setTarget(checkValue, dataIndex, i, True))
+    canvas.bind("<Button-1>", lambda _event: self.setTarget(checkValue, dataIndex, i, fromCanvas=True))
     parent = data["path"].parent.relative_to(self.master.directory)
 
     checkbutton = ttk.Checkbutton(
@@ -260,7 +260,7 @@ class CanvasWindow(tk.Canvas):
     checkbutton.place(x=2, y=2, anchor=tk.NW)
     self.widgets.append((canvas, checkbutton))
 
-  def setTarget(self, checkValue, indexData, index, fromCanvas=False):
+  def setTarget(self, checkValue, indexData, index, *, fromCanvas=False):
     checked = checkValue.get()
     if fromCanvas:
       checked = not checked
@@ -357,10 +357,9 @@ class SameImageViewer(ttk.Frame):
       height=self.resolution[1] - (frameCommandHeight + titleBarHeight),
     )
     self.canvasWindow.configure(scrollregion=(0, 0, 0, self.resolution[1] - (frameCommandHeight + titleBarHeight)))
-    self.master.wm_attributes("-transparentcolor", "gray")
     self.setBind()
     self.liftTop()
-    self.draw(True)
+    self.draw(isAutoSize=True)
 
   def setStyle(self):
     self.style = ttk.Style()
@@ -443,7 +442,7 @@ class SameImageViewer(ttk.Frame):
     self.countFile = sum(map(len, self.data))
     self.countFileWidth = len(str(self.countFile))
 
-  def draw(self, isAutoSize=False):
+  def draw(self, *, isAutoSize=False):
     self.canvasWindow.deleteAllWidgets()
     if len(self.data) <= 0:
       self.countImage = 0
@@ -497,7 +496,7 @@ class SameImageViewer(ttk.Frame):
       self.current += 1
     else:
       self.current = 0
-    self.draw(True)
+    self.draw(isAutoSize=True)
 
   def previous(self):
     if self.countData < 1:
@@ -506,7 +505,7 @@ class SameImageViewer(ttk.Frame):
       self.current -= 1
     else:
       self.current = self.countData - 1
-    self.draw(True)
+    self.draw(isAutoSize=True)
 
   def updateTargetCount(self):
     self.svTargetCount.set(f"{len(self.targets):0{self.maxImageWidth}}/{self.countImage:0{self.maxImageWidth}}")
@@ -541,7 +540,7 @@ class SameImageViewer(ttk.Frame):
   def undo(self, _event):
     if len(self.record) < 1:
       return
-    data, indexData, indexFile, destination = self.record.pop()  # indexFileは要らない
+    data, indexData, _, destination = self.record.pop()  # _: indexFile
     self.data[indexData].append(data)
     self.data[indexData].sort(key=lambda x: x["path"])
     shutil.move(destination, data["path"])
@@ -561,7 +560,7 @@ class SameImageViewer(ttk.Frame):
       return
     for indexData, indexFile in self.targets:
       cmd = ["explorer", self.data[indexData][indexFile]["path"].parent]
-      subprocess.Popen(cmd)
+      subprocess.Popen(cmd)  # noqa: S603
 
   def liftTop(self):
     self.master.attributes("-topmost", True)
@@ -569,11 +568,10 @@ class SameImageViewer(ttk.Frame):
     self.focus_set()
 
   def callImageDiffViewer(self, _event=None):
-    if len(self.targets) < 2:
+    if len(self.targets) < 2:  # noqa: PLR2004
       return
     self.ImageDiffViewerRoot = tk.Toplevel(self)
     files = [self.data[indexData][indexFile]["path"] for indexData, indexFile in self.targets]
-    # self.imageDiffViewer = ImageDiffViewer.ImageDiffViewer(None, files, master=self.ImageDiffViewerRoot)
     self.ImageDiffViewer = ImageDiffViewer.ImageDiffViewer(None, files, master=self.ImageDiffViewerRoot)
 
 
