@@ -70,7 +70,11 @@ class ImageDiffViewer(tk.Frame):
     titleBarHeight = 30
     self.frameTitle.place(anchor=tk.NW, x=0, y=0, width=self.resolution[0], height=titleBarHeight)
     self.canvas.place(
-      anchor=tk.NW, x=0, y=titleBarHeight, width=self.resolution[0], height=self.resolution[1] - titleBarHeight
+      anchor=tk.NW,
+      x=0,
+      y=titleBarHeight,
+      width=self.resolution[0],
+      height=self.resolution[1] - titleBarHeight,
     )
     self.canvas.update()
     self.canvasSize = (self.canvas.winfo_width(), self.canvas.winfo_height())
