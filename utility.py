@@ -1,13 +1,15 @@
+import itertools
+import math
 import pathlib
+import subprocess
 from collections import deque
 
 import cv2
+import Decorator as D
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageChops
 
 import Utility as U
-
-# ReJapanese = regex.compile(r"[\p{sc=Han}\p{sc=Hiragana}\p{Katakana}]+")
 
 
 def checkFileName(path, sep="#", width=2, isMakeDir=False):
@@ -65,9 +67,9 @@ def comparePHash(ph1, ph2, phObj=None):
   return phObj.compare(ph1, ph2)
 
 
-def isSameImage(target, other, phObj=None, threshold=10.0):  # , diffRatio=0.1):
+def isSameImage(target, other, phObj=None, threshold=9.0):
   diff = comparePHash(target["pHash"], other["pHash"], phObj)
-  if diff < threshold:  # and abs(getRatio(target["shape"]) - getRatio(other["shape"])) <= diffRatio:
+  if diff < threshold:
     return True, diff, other
   return False, diff, other
 
@@ -76,12 +78,71 @@ def getRatio(shape, n=4):
   return round(shape[0] / shape[1], n)
 
 
-# def dump(path, obj):
-#   with path.open("wb") as file:
-#     pickle.dump(obj, file)
+def factor(x):
+  if x == 1:
+    return [1]
+  result = []
+  for n in range(2, x + 1):
+    if x < n:
+      return result
+    while x % n == 0:
+      result.append(n)
+      x //= n
+  return result
 
-# def remove(lt, key, value):
-#   for i, x in enumerate(lt):
-#     if x[key] == value:
-#       lt.pop(i)
-#       return
+
+def getFactorPairs(lt, n):
+  if n > len(lt):
+    return []
+  result = []
+  comb = itertools.combinations(lt, r=n)
+  for x in comb:
+    other = lt.copy()
+    for y in x:
+      other.remove(y)
+    data = sorted([math.prod(x), math.prod(other)])
+    if data not in result:
+      result.append(data)
+  return result
+
+
+def getAllFactorPairs(fts):
+  l = max(2, len(fts))
+  result = []
+  for i in range(1, l // 2 + 1):
+    data = getFactorPairs(fts, i)
+    if data not in result:
+      result.extend(data)
+  return sorted(result)
+
+
+def getMinFactorPair(n):
+  fts = factor(n)
+  while n > 2 and len(fts) == 1:  # 素数はペアにならないので避ける
+    n += 1
+    fts = factor(n)
+  result = getAllFactorPairs(fts)
+  return result[-1]
+
+
+ColorModes = ["1", "L", "P", "RGB", "RGBA"]  # "CMYK", "YCvCr", "LAB", "HSV", "I", "F"
+
+
+def makeSameColor(image1, image2):
+  m1 = U.indexList(ColorModes, image1.mode)
+  m2 = U.indexList(ColorModes, image2.mode)
+  mode = ColorModes[max(m1, m2)]
+  return image1.convert(mode), image2.convert(mode)
+
+
+def diffImage(image1, image2):
+  size = max(image1.size, image2.size)
+  img1 = image1.resize(size, Image.LANCZOS) if image1.size != size else image1
+  img2 = image2.resize(size, Image.LANCZOS) if image2.size != size else image2
+  img1, img2 = makeSameColor(img1, img2)
+  return ImageChops.difference(img1, img2)
+
+
+def callExplorer(params):
+  cmd = ["explorer"] + params
+  subprocess.Popen(cmd)
