@@ -5,7 +5,6 @@ import pathlib
 import tkinter as tk
 from tkinter import ttk
 
-import Decorator as D
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -147,13 +146,11 @@ class ImageDiffViewer(tk.Frame):
       u.resizeImage(u.diffImage(self.images[i], self.images[j]), self.canvasSize[0] // 3, self.canvasSize[1]),
     )
 
-  @D.printFuncInfo()
   def readImages(self):
     indices = itertools.combinations(range(self.countFile), r=2)
     with cf.ThreadPoolExecutor() as ex:
       results = ex.map(self.openImage, self.paths, timeout=60)
       self.images = list(results)
-      # n = self.images == self.countFile
       results = ex.map(self.getImageDiff, indices, timeout=180)
       self.data = list(results)
       results = ex.map(self.resizeImage, self.images, timeout=60)
@@ -167,7 +164,6 @@ class ImageDiffViewer(tk.Frame):
     self.tkImages = [(ImageTk.PhotoImage(self.images[i][0], master=self.canvas), self.images[i][1]) for i in index]
     self.tkImages.append((ImageTk.PhotoImage(diffImage, master=self.canvas), 0))
 
-  @D.printFuncInfo()
   def drawImage(self):
     self.liftTop()
     self.canvas.delete("all")

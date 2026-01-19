@@ -8,7 +8,6 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
-import Decorator as D
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -210,7 +209,6 @@ class FrameCommand(ttk.Frame):
     self.comboboxColor.select_clear()
     self.master.draw(isAutoSize=True)
 
-  # @D.printFuncInfo()
   def changeButtonState(self):
     if len(self.master.targets) > 0:
       self.buttonMove.config(state="normal")
@@ -285,7 +283,6 @@ class CanvasWindow(tk.Canvas):
   def openImages(self, data):
     return list(self.executor.map(self.openImage, data, timeout=30))
 
-  # @D.printFuncInfo()
   def createAllCanvas(self, files, dataIndex):
     images = self.openImages(files)
     row = 0
@@ -762,7 +759,6 @@ class SameImageViewer(ttk.Frame):
     self.master.attributes("-topmost", False)
     self.focus_set()
 
-  @D.printFuncInfo()
   def callImageDiffViewer(self, _event=None):
     if len(self.targets) < 2:  # noqa: PLR2004
       return
