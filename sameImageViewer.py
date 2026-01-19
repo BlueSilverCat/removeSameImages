@@ -413,8 +413,14 @@ class SameImageViewer(ttk.Frame):
 
     self.ivRow = tk.IntVar(self, 2)
     self.ivColumn = tk.IntVar(self, 2)
-    self.frameCommand = FrameCommand(self)
 
+    self.placeWidgets()
+    self.setBind()
+    self.liftTop()
+    self.draw(isAutoSize=True)
+
+  def placeWidgets(self):
+    self.frameCommand = FrameCommand(self)
     titleBarHeight = 30  # 23  # 31
     frameCommandHeight = 30
     self.canvasWindow = CanvasWindow(
@@ -448,9 +454,6 @@ class SameImageViewer(ttk.Frame):
       height=self.resolution[1] - (frameCommandHeight + titleBarHeight),
     )
     self.canvasWindow.configure(scrollregion=(0, 0, 0, self.resolution[1] - (frameCommandHeight + titleBarHeight)))
-    self.setBind()
-    self.liftTop()
-    self.draw(isAutoSize=True)
 
   def setStyle(self):
     self.style = ttk.Style()
@@ -572,7 +575,7 @@ class SameImageViewer(ttk.Frame):
     )
 
   def setBind(self):
-    self.master.bind("<Configure>", self.onOverRideRedirect)  # Configure, Expose, Visibility
+    self.master.bind("<Configure>", self.onOverRideRedirect)
     # self.master.bind("<KeyPress-Escape>", lambda _event: self.frameTitle.buttonClose.invoke())
     self.master.bind("<MouseWheel>", self.scroll)
     self.master.bind("<KeyPress-Return>", lambda _event: self.frameCommand.buttonMove.invoke())
@@ -597,21 +600,15 @@ class SameImageViewer(ttk.Frame):
     self.master.bind("<KeyPress-d>", lambda _event: self.frameCommand.buttonImageDiffViewer.invoke())
     self.master.bind("<KeyPress-0>", lambda _event: self.frameCommand.buttonImageDiffViewer.invoke())
     self.master.bind("<KeyPress-o>", lambda _event: self.frameCommand.buttonOutput.invoke())
-
     self.master.bind("<KeyPress-a>", lambda _event: self.frameCommand.buttonCheckAll.invoke())
     self.master.bind("<KeyPress-Insert>", lambda _event: self.frameCommand.buttonCheckAll.invoke())
     self.master.bind("<KeyPress-q>", lambda _event: self.frameCommand.buttonUncheckAll.invoke())
     self.master.bind("<KeyPress-Delete>", lambda _event: self.frameCommand.buttonUncheckAll.invoke())
 
-  def getMasterSize(self):
-    # self.master.update()
-    return (self.master.winfo_width(), self.master.winfo_height())
-
   def onOverRideRedirect(self, _event):
     if self.master.state() == "normal" and not self.master.wm_overrideredirect():
       self.master.wm_overrideredirect(True)
 
-  @D.printFuncInfo()
   def load(self):
     self.pm = U.PickleManager(self.dumpFile)
     data = self.pm.loadExternal()
@@ -630,23 +627,16 @@ class SameImageViewer(ttk.Frame):
       if not dt["path"].exists():
         self.data[i].remove(dt)
 
-  @D.printFuncInfo()
   def checkData(self):  # sort?
     data = (sorted(lt, key=lambda dt: dt["path"]) for lt in self.data)
     with cf.ThreadPoolExecutor() as ex:
       ex.map(self.deleteNotExists, enumerate(data), timeout=60)
-    # for i, lt in enumerate(self.data[:]):
-    #   lt.sort(key=lambda x: x["path"])
-    #   for dt in lt[:]:
-    #     if not dt["path"].exists():
-    #       self.data[i].remove(dt)
     self.data = list(filter(lambda x: len(x) > 1, self.data))
     self.countData = len(self.data)
     self.countDataWidth = len(str(self.countData))
     self.countFile = sum(map(len, self.data))
     self.countFileWidth = len(str(self.countFile))
 
-  # @D.printFuncInfo()
   def draw(self, *, isAutoSize=False):
     self.canvasWindow.deleteAllWidgets()
     self.frameCommand.changeButtonState()
@@ -664,7 +654,6 @@ class SameImageViewer(ttk.Frame):
     self.canvasWindow.expandArea(self.countImage)
     self.canvasWindow.createAllCanvas(self.data[self.current], self.current)
 
-  # @D.printFuncInfo()
   def perform(self):
     self.canvasWindow.deleteWidgets()
     for indexData, indexFile in self.targets:
@@ -678,8 +667,6 @@ class SameImageViewer(ttk.Frame):
       print(f"Move: {U.subPath(source, self.directory)!s}\n -> {U.subPath(destination, self.directory)!s}")
       shutil.move(source, destination)
     self.targets = []
-    # self.updateTargetCount()
-    # self.updateRecordCount()
     self.deleteData()
     self.draw(isAutoSize=True)
 
@@ -691,13 +678,11 @@ class SameImageViewer(ttk.Frame):
     self.data[self.current] = data
     self.checkedWidgetIndices = []
     self.countImage = len(self.data[self.current])
-    # self.updateTargetCount()
 
   def scroll(self, event):
-    # scrollregionが0でも移動する
+    # scrollregionが0でも移動する?
     self.canvasWindow.yview("scroll", int(-1 * (event.delta / 120)), "units")
 
-  # @D.printFuncInfo()
   def next(self):
     if self.countData < 1:
       return
@@ -747,7 +732,6 @@ class SameImageViewer(ttk.Frame):
       for data, _, _, destination in self.record:
         file.write(f"{data['path']}, {destination}\n")
 
-  @D.printFuncInfo()
   def undo(self):
     if len(self.record) < 1:
       return
