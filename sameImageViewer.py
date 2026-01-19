@@ -305,7 +305,7 @@ class CanvasWindow(tk.Canvas):
       self.frameWindow,
       width=self.thumbnailSize[0],
       height=self.thumbnailSize[1],
-      bg="gray80",
+      bg=U.hsvToRgbString([180, 0.05, 1.0]),
       highlightthickness=0,
     )
     checkValue = tk.BooleanVar(value=False)
