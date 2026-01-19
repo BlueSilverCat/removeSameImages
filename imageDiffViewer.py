@@ -89,7 +89,7 @@ class ImageDiffViewer(tk.Frame):
     self.drawImage()
 
   def setBinds(self):
-    self.master.bind("<Configure>", self.onOverRidereDirect)
+    self.master.bind("<Configure>", self.onOverRideRedirect)
     self.master.bind("<KeyPress-Right>", self.next)
     self.master.bind("<KeyPress-Left>", self.previous)
     self.master.bind("<KeyPress-Escape>", self.destroyAll)
@@ -214,7 +214,7 @@ class ImageDiffViewer(tk.Frame):
       self.current = self.countImages - 1
     self.drawImage()
 
-  def onOverRidereDirect(self, _event):
+  def onOverRideRedirect(self, _event):
     if self.master.state() == "normal" and not self.master.wm_overrideredirect():
       self.master.wm_overrideredirect(True)
 
