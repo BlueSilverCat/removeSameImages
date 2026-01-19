@@ -24,21 +24,21 @@ class FrameTitle(ttk.Frame):
     self.labelDirectory = ttk.Label(
       self,
       text=self.master.directory,
-      style="front.TLabel",
+      style="G2.TLabel",
     )
     self.buttonClose = ttk.Button(
       self,
       text="close",
       takefocus=True,
       command=self.close,
-      style="front.TButton",
+      style="G1.TButton",
     )
     self.buttonMinimize = ttk.Button(
       self,
       text="minimize",
       takefocus=True,
       command=self.minimize,
-      style="front.TButton",
+      style="G2.TButton",
     )
 
     self.buttonClose.pack(side=tk.RIGHT, fill=tk.BOTH)
@@ -62,77 +62,69 @@ class FrameCommand(ttk.Frame):
       text="next",
       takefocus=True,
       command=self.master.next,
-      style="front.TButton",
+      style="G2.TButton",
     )
     self.buttonPrevious = ttk.Button(
       self,
       text="previous",
       takefocus=True,
       command=self.master.previous,
-      style="front.TButton",
+      style="G2.TButton",
     )
-    self.buttonPerform = ttk.Button(
+    self.buttonMove = ttk.Button(
       self,
-      text="perform",
+      text="move",
       command=self.master.perform,
-      style="back.TButton",
+      style="G1.TButton",
       state="disabled",
     )
     self.buttonUndo = ttk.Button(
       self,
       text="undo",
       command=self.master.undo,
-      style="back.TButton",
-      state="disabled",
-    )
-    self.buttonExplorer = ttk.Button(
-      self,
-      text="explorer",
-      command=self.master.explorer,
-      style="front.TButton",
+      style="G1.TButton",
       state="disabled",
     )
 
-    self.labelRemainCount = ttk.Label(
-      self,
-      textvariable=self.master.svRemainCount,
-      style="front.TLabel",
-    )
-
-    self.labelTargetCount = ttk.Label(
-      self,
-      textvariable=self.master.svTargetCount,
-      style="front.TLabel",
-    )
     self.labelRecordCount = ttk.Label(
       self,
       textvariable=self.master.svRecordCount,
-      style="front.TLabel",
+      style="G1.TLabel",
+    )
+    self.labelRemainCount = ttk.Label(
+      self,
+      textvariable=self.master.svRemainCount,
+      style="G2.TLabel",
+    )
+    self.labelTargetCount = ttk.Label(
+      self,
+      textvariable=self.master.svTargetCount,
+      style="G3.TLabel",
     )
 
-    self.labelRow = ttk.Label(self, text="Row")
+    self.labelRow = ttk.Label(self, text="Row", style="G4.TLabel")
     self.spinboxRow = ttk.Spinbox(
       self,
       from_=1,
       to=10,
       increment=1,
       textvariable=self.master.ivRow,
-      width=3,
+      width=2,
       font=("", 18),
       state="readonly",
-      command=self.master.draw,
+      command=self.selectedSpinbox,
     )
-    self.labelColumn = ttk.Label(self, text="Column")
+    self.labelColumn = ttk.Label(self, text="Column", style="G4.TLabel")
     self.spinboxColumn = ttk.Spinbox(
       self,
       from_=1,
       to=20,
       increment=1,
       textvariable=self.master.ivColumn,
-      width=3,
+      width=2,
       font=("", 18),
       state="readonly",
-      command=self.master.draw,
+      command=self.selectedSpinbox,
     )
 
     self.comboboxColor = ttk.Combobox(
@@ -142,48 +134,55 @@ class FrameCommand(ttk.Frame):
       width=8,
       state="readonly",
     )
-    self.comboboxColor.bind("<<ComboboxSelected>>", lambda _event: self.master.draw(isAutoSize=True))
+    self.comboboxColor.bind("<<ComboboxSelected>>", self.selectedCombobox)
+    self.buttonExplorer = ttk.Button(
+      self,
+      text="explorer",
+      command=self.master.explorer,
+      style="G5.TButton",
+      state="disabled",
+    )
     self.buttonImageDiffViewer = ttk.Button(
       self,
       text="imageDiffViewer",
       command=self.master.callImageDiffViewer,
-      style="front.TButton",
+      style="G5.TButton",
       state="disabled",
     )
     self.buttonOutput = ttk.Button(
       self,
       text="output",
       command=self.master.openOutput,
-      style="front.TButton",
+      style="G5.TButton",
     )
     self.buttonCheckAll = ttk.Button(
       self,
       text="checkAll",
       command=lambda: self.master.canvasWindow.setAll(True),
-      style="front.TButton",
+      style="G3.TButton",
     )
     self.buttonUncheckAll = ttk.Button(
       self,
       text="uncheckAll",
       command=lambda: self.master.canvasWindow.setAll(False),
-      style="front.TButton",
+      style="G3.TButton",
     )
     self.buttonSetOne = ttk.Button(
       self,
       text="one",
       command=lambda: self.master.changeGrid(one=True),
-      style="front.TButton",
+      style="G4.TButton",
     )
     self.buttonSetAuto = ttk.Button(
       self,
       text="auto",
       command=self.master.changeGrid,
-      style="front.TButton",
+      style="G4.TButton",
     )
 
     self.buttonUndo.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelRecordCount.pack(side=tk.RIGHT, fill=tk.BOTH)
-    self.buttonPerform.pack(side=tk.RIGHT, fill=tk.BOTH)
+    self.buttonMove.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.buttonNext.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelRemainCount.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.buttonPrevious.pack(side=tk.RIGHT, fill=tk.BOTH)
@@ -202,13 +201,22 @@ class FrameCommand(ttk.Frame):
     self.buttonExplorer.pack(side=tk.LEFT, fill=tk.BOTH)
     self.buttonImageDiffViewer.pack(side=tk.LEFT, fill=tk.BOTH)
 
+  def selectedSpinbox(self):
+    self.spinboxRow.select_clear()
+    self.spinboxColumn.select_clear()
+    self.master.draw()
+
+  def selectedCombobox(self, _event):
+    self.comboboxColor.select_clear()
+    self.master.draw(isAutoSize=True)
+
   # @D.printFuncInfo()
   def changeButtonState(self):
     if len(self.master.targets) > 0:
-      self.buttonPerform.config(state="normal")
+      self.buttonMove.config(state="normal")
       self.buttonExplorer.config(state="normal")
     else:
-      self.buttonPerform.config(state="disabled")
+      self.buttonMove.config(state="disabled")
       self.buttonExplorer.config(state="disabled")
     if len(self.master.targets) > 1:
       self.buttonImageDiffViewer.config(state="normal")
@@ -448,15 +456,50 @@ class SameImageViewer(ttk.Frame):
     self.style = ttk.Style()
     self.font = ("BIZ UDゴシック", 16)
     self.style.theme_use("clam")
-    self.style.configure("TLabel", background="light cyan", font=self.font)
-    self.style.configure("front.TLabel", background="turquoise", font=("", 16, "bold"))
-    self.style.configure("TButton", font=("", 10), padding=[0, 0, 0, 0])
+    colorLabels = [
+      U.hsvToRgbString([30, 0.3, 1.0]),
+      U.hsvToRgbString([210, 0.3, 1.0]),
+      U.hsvToRgbString([150, 0.3, 1.0]),
+      U.hsvToRgbString([60, 0.3, 1.0]),
+    ]
+    self.style.configure("TFrame", background=U.hsvToRgbString([180, 0.05, 1.0]))
+    self.style.configure("G1.TLabel", background=colorLabels[0], font=self.font)
+    self.style.configure("G2.TLabel", background=colorLabels[1], font=self.font)
+    self.style.configure("G3.TLabel", background=colorLabels[2], font=self.font)
+    self.style.configure("G4.TLabel", background=colorLabels[3], font=self.font)
+    colorButtons1 = [
+      U.hsvToRgbString([0, 0.8, 1.0]),
+      U.hsvToRgbString([30, 0.6, 1.0]),
+      U.hsvToRgbString([0, 0.6, 1.0]),
+    ]
+    colorButtons2 = [
+      U.hsvToRgbString([240, 0.8, 1.0]),
+      U.hsvToRgbString([210, 0.6, 1.0]),
+      U.hsvToRgbString([240, 0.6, 1.0]),
+    ]
+    colorButtons3 = [
+      U.hsvToRgbString([120, 0.8, 1.0]),
+      U.hsvToRgbString([150, 0.6, 1.0]),
+      U.hsvToRgbString([120, 0.6, 1.0]),
+    ]
+    colorButtons4 = [
+      U.hsvToRgbString([60, 0.8, 1.0]),
+      U.hsvToRgbString([90, 0.6, 1.0]),
+      U.hsvToRgbString([60, 0.6, 1.0]),
+    ]
+    colorButtons5 = [
+      U.hsvToRgbString([300, 0.8, 1.0]),
+      U.hsvToRgbString([330, 0.6, 1.0]),
+      U.hsvToRgbString([300, 0.6, 1.0]),
+    ]
+
+    self.style.configure("TButton", font=("BIZ UDゴシック", 10), padding=[0, 0, 0, 0])
     self.style.map(
-      "front.TButton",
+      "G1.TButton",
       background=[
-        ("pressed", "blue"),
-        ("active", "cyan"),
-        ("!disabled", "light sky blue"),
+        ("pressed", colorButtons1[0]),
+        ("active", colorButtons1[1]),
+        ("!disabled", colorButtons1[2]),
       ],
       relief=[
         ("pressed", "sunken"),
@@ -464,24 +507,66 @@ class SameImageViewer(ttk.Frame):
       ],
     )
     self.style.map(
-      "back.TButton",
+      "G2.TButton",
       background=[
-        ("pressed", "red"),
-        ("active", "orange"),
-        ("!disabled", "magenta1"),
+        ("pressed", colorButtons2[0]),
+        ("active", colorButtons2[1]),
+        ("!disabled", colorButtons2[2]),
       ],
       relief=[
         ("pressed", "sunken"),
         ("!pressed", "raised"),
       ],
     )
+    self.style.map(
+      "G3.TButton",
+      background=[
+        ("pressed", colorButtons3[0]),
+        ("active", colorButtons3[1]),
+        ("!disabled", colorButtons3[2]),
+      ],
+      relief=[
+        ("pressed", "sunken"),
+        ("!pressed", "raised"),
+      ],
+    )
+    self.style.map(
+      "G4.TButton",
+      background=[
+        ("pressed", colorButtons4[0]),
+        ("active", colorButtons4[1]),
+        ("!disabled", colorButtons4[2]),
+      ],
+      relief=[
+        ("pressed", "sunken"),
+        ("!pressed", "raised"),
+      ],
+    )
+    self.style.map(
+      "G5.TButton",
+      background=[
+        ("pressed", colorButtons5[0]),
+        ("active", colorButtons5[1]),
+        ("!disabled", colorButtons5[2]),
+      ],
+      relief=[
+        ("pressed", "sunken"),
+        ("!pressed", "raised"),
+      ],
+    )
+
+    colorCombobox = [
+      U.hsvToRgbString([240, 0.3, 1.0]),
+      U.hsvToRgbString([220, 0.3, 1.0]),
+      U.hsvToRgbString([200, 0.3, 1.0]),
+    ]
     self.style.configure("TCombobox", foreground="black", background="white", font=self.font)
     self.style.map(
       "TCombobox",
       fieldbackground=[
-        ("pressed", "blue"),
-        ("active", "cyan"),
-        ("readonly", "light sky blue"),
+        ("pressed", colorCombobox[0]),
+        ("active", colorCombobox[1]),
+        ("readonly", colorCombobox[2]),
         ("!disabled", "gray"),
       ],
     )
@@ -490,7 +575,7 @@ class SameImageViewer(ttk.Frame):
     self.master.bind("<Configure>", self.onOverRideRedirect)  # Configure, Expose, Visibility
     # self.master.bind("<KeyPress-Escape>", lambda _event: self.frameTitle.buttonClose.invoke())
     self.master.bind("<MouseWheel>", self.scroll)
-    self.master.bind("<KeyPress-Return>", lambda _event: self.frameCommand.buttonPerform.invoke())
+    self.master.bind("<KeyPress-Return>", lambda _event: self.frameCommand.buttonMove.invoke())
     self.master.bind("<KeyPress-7>", lambda event: self.changeRow(event, 1))
     self.master.bind("<KeyPress-4>", lambda event: self.changeRow(event, -1))
     self.master.bind("<KeyPress-9>", lambda event: self.changeColumn(event, 1))
