@@ -69,7 +69,7 @@ def comparePHash(ph1, ph2, phObj=None):
 
 def isSameImage(target, other, phObj=None, threshold=9.0):
   diff = comparePHash(target["pHash"], other["pHash"], phObj)
-  if diff < threshold:
+  if diff <= threshold:
     return True, diff, other
   return False, diff, other
 
@@ -117,6 +117,8 @@ def getAllFactorPairs(fts):
 
 
 def getMinFactorPair(n):
+  if n == 0:
+    n = 1
   fts = factor(n)
   while n > 2 and len(fts) == 1:  # 素数はペアにならないので避ける
     n += 1
