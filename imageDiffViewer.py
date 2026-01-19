@@ -5,6 +5,7 @@ import pathlib
 import tkinter as tk
 from tkinter import ttk
 
+import Decorator as D
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -64,7 +65,7 @@ class ImageDiffViewer(tk.Frame):
     self.images = []
 
     self.frameTitle = FrameTitle(self.master, self)
-    self.canvas = tk.Canvas(self, width=self.resolution[0], height=self.resolution[1])
+    self.canvas = tk.Canvas(self, width=self.resolution[0], height=self.resolution[1], highlightthickness=0)
 
     self.pack()
     titleBarHeight = 30
@@ -131,7 +132,7 @@ class ImageDiffViewer(tk.Frame):
     self.countFile = len(self.paths)
 
   def resizeImage(self, image):
-    return u.resizeImage(image, self.canvasSize[0] // 3, self.canvasSize[1])
+    return u.resizeImage(image, self.canvasSize[0] // 3, self.canvasSize[1]), image.size
 
   def openImage(self, path):
     image = Image.open(path)
@@ -146,25 +147,27 @@ class ImageDiffViewer(tk.Frame):
       u.resizeImage(u.diffImage(self.images[i], self.images[j]), self.canvasSize[0] // 3, self.canvasSize[1]),
     )
 
+  @D.printFuncInfo()
   def readImages(self):
     indices = itertools.combinations(range(self.countFile), r=2)
     with cf.ThreadPoolExecutor() as ex:
-      results = ex.map(self.openImage, self.paths)
+      results = ex.map(self.openImage, self.paths, timeout=60)
       self.images = list(results)
       # n = self.images == self.countFile
-      results = ex.map(self.getImageDiff, indices)
+      results = ex.map(self.getImageDiff, indices, timeout=180)
       self.data = list(results)
-      results = ex.map(self.resizeImage, self.images)
+      results = ex.map(self.resizeImage, self.images, timeout=60)
       self.images = list(results)
       self.countImages = len(self.data)
 
   def destroyAll(self, _event):
     self.master.destroy()
 
-  def setTkImage(self, index, image):
-    self.tkImages = [ImageTk.PhotoImage(self.images[i], master=self.canvas) for i in index]
-    self.tkImages.append(ImageTk.PhotoImage(image, master=self.canvas))
+  def setTkImage(self, index, diffImage):
+    self.tkImages = [(ImageTk.PhotoImage(self.images[i][0], master=self.canvas), self.images[i][1]) for i in index]
+    self.tkImages.append((ImageTk.PhotoImage(diffImage, master=self.canvas), 0))
 
+  @D.printFuncInfo()
   def drawImage(self):
     self.liftTop()
     self.canvas.delete("all")
@@ -172,18 +175,30 @@ class ImageDiffViewer(tk.Frame):
     index = (x, y)
     self.setTkImage(index, image)
     width = self.canvasSize[0] // 3
-    for i, image in enumerate(self.tkImages):
+    sizes = []
+    for i, (image, size) in enumerate(self.tkImages):
       x = width // 2 + i * width
       self.canvas.create_image(x, self.canvasSize[1] // 2, image=image, anchor=tk.CENTER)
+      sizes.append(size)
     for i, n in enumerate(index):
       self.canvas.create_text(
         i * width + 5,
         0,
-        text=f"{self.paths[n].parent.name}\n{self.paths[n].name}",
+        text=f"{self.paths[n].parent.name}\n{self.paths[n].name}\n{sizes[i]}",
         anchor=tk.NW,
-        font=("BIZ UDゴシック", 18, "bold"),
+        font=("BIZ UDゴシック", 16, "bold"),
         fill="red",
       )
+    n = len(self.data)
+    l = len(str(n))
+    self.canvas.create_text(
+      2 * width + 5,
+      0,
+      text=f"{self.current + 1:{l}}\n{n:{l}}",
+      anchor=tk.NW,
+      font=("BIZ UDゴシック", 16, "bold"),
+      fill="red",
+    )
 
   def next(self, _event):
     if self.current < self.countImages - 1:
@@ -200,7 +215,7 @@ class ImageDiffViewer(tk.Frame):
     self.drawImage()
 
   def onOverRidereDirect(self, _event):
-    if self.master.state() == "normal":
+    if self.master.state() == "normal" and not self.master.wm_overrideredirect():
       self.master.wm_overrideredirect(True)
 
   def liftTop(self):
