@@ -1,18 +1,16 @@
 import itertools
 import math
 import pathlib
-import subprocess
 from collections import deque
 
 import cv2
-import Decorator as D
 import numpy as np
 from PIL import Image, ImageChops
 
 import Utility as U
 
 
-def checkFileName(path, sep="#", width=2, isMakeDir=False):
+def checkFileName(path, sep="#", width=2, *, isMakeDir=False):
   path = pathlib.Path(path) if isinstance(path, str) else path
   if isMakeDir:
     path.parent.mkdir(exist_ok=True)
@@ -123,7 +121,7 @@ def getMinFactorPair(n):
   if n == 0:
     n = 1
   fts = factor(n)
-  while n > 2 and len(fts) == 1:  # 素数はペアにならないので避ける
+  while n > 2 and len(fts) == 1:  # 素数はペアにならないので避ける  # noqa: PLR2004
     n += 1
     fts = factor(n)
   result = getAllFactorPairs(fts)
@@ -148,6 +146,6 @@ def diffImage(image1, image2):
   return ImageChops.difference(img1, img2)
 
 
-def callExplorer(params):
-  cmd = ["explorer"] + params
-  subprocess.Popen(cmd)
+# def callExplorer(params):
+#   cmd = ["explorer", *params]
+#   subprocess.Popen(cmd)
