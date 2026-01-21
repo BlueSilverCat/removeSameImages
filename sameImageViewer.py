@@ -2,7 +2,6 @@ import argparse
 import concurrent.futures as cf
 import functools
 import shutil
-import subprocess
 import sys
 import tkinter as tk
 from pathlib import Path
