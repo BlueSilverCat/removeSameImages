@@ -1,6 +1,7 @@
 import argparse
 import concurrent.futures as cf
 import pathlib
+import pickle
 import sys
 import threading
 
@@ -15,13 +16,15 @@ def getFiles(path, targetPath, extensions=None):
   if extensions is None:
     extensions = [".jpg", ".png", ".webp", ".gif"]
   if targetPath is not None:
-    targets = u.getFiles(targetPath, isRecurse=True, extensions=extensions)
-    others = u.getFiles(path, isRecurse=True, extensions=extensions)
+    targets, targetDirs = u.getFiles(targetPath, isRecurse=True, extensions=extensions)
+    others, otherDirs = u.getFiles(path, isRecurse=True, extensions=extensions)
+    targets = U.subList(targets, others)
     others = U.subList(others, targets)
+    dirs = targetDirs | otherDirs
   else:
-    targets = u.getFiles(path, isRecurse=True, extensions=extensions)
+    targets, dirs = u.getFiles(path, isRecurse=True, extensions=extensions)
     others = targets
-  return targets, others
+  return targets, others, dirs
 
 
 def setInfo(data):
@@ -47,26 +50,29 @@ def dump(pm, obj, lock):
     pm.dump(obj)
 
 
-def check(result, sames, others, fails):
-  isSame, diff, other = result
+def check(result, other, sames, others, fails, dirs):
+  isSame, diff = result
   if isSame:
     others.remove(other)
     other["diff"] = diff
-    U.delKeys(other, ["pHash"])
     sames.append(other)
+    dirs[other["path"].parent]["sames"] += 1
   elif diff is None:
     others.remove(other)
     fails.append(other["path"])
 
 
-def dumpSameImages(path, pickleOutput, failedPath, targetPath=None, threshold=9.0):
+def dumpSameImages(path, pickleOutput, failedPath, targetPath=None, threshold=9.0, extensions=None):
   pm = U.PickleManager(pickleOutput)
   pm.dump(path)
-  targets, others = getFiles(path, targetPath)
+  pm.dump(targetPath)
+  pm.dump(extensions)
+  targets, others, dirs = getFiles(path, targetPath, extensions)
   lock = threading.Lock()
   phObj = cv2.img_hash.PHash().create()
   fails = []
   with cf.ThreadPoolExecutor() as ex:
+    print("Calculate pHash...")
     setInfoAll(targets, ex, fails)
     if targetPath is not None:
       setInfoAll(others, ex, fails)
@@ -77,14 +83,17 @@ def dumpSameImages(path, pickleOutput, failedPath, targetPath=None, threshold=9.
       print(f"\r\x1b[1M{len(others)}: {target['path'].parent.name} {target['path'].name}", end="")
       for other in others[:]:
         r = u.isSameImage(target, other, phObj, threshold)
-        check(r, sames, others, fails)
+        check(r, other, sames, others, fails, dirs)
       U.delKeys(target, ["pHash"])
       if len(sames) > 1:
+        dirs[target["path"].parent]["sames"] += 1
         ex.submit(dump, pm, sames, lock)
+  pm.dump(dirs)
   print()
   if len(fails) > 1:
-    U.customPrint(fails)
-    u.dump(failedPath, fails)
+    print(f"fails: {fails}")
+    with failedPath.open("wb") as file:
+      pickle.dump(fails, file)
 
 
 def getPHashDiff(target, other, phObj=None):
@@ -92,8 +101,8 @@ def getPHashDiff(target, other, phObj=None):
   return target["path"], other["path"], diff
 
 
-def comparePHash(path, failedPath, targetPath=None):
-  targets, others = getFiles(path, targetPath)
+def comparePHash(path, failedPath, targetPath=None, extensions=None):
+  targets, others, _ = getFiles(path, targetPath, extensions)
   phObj = cv2.img_hash.PHash().create()
   fails = []
   result = []
@@ -108,8 +117,9 @@ def comparePHash(path, failedPath, targetPath=None):
       result.extend([getPHashDiff(target, other, phObj) for other in others])
   print()
   if len(fails) > 1:
-    U.customPrint(fails)
-    u.dump(failedPath, fails)
+    print(f"fails: {fails}")
+    with failedPath.open("wb") as file:
+      pickle.dump(fails, file)
   print(path)
   print(targetPath)
   for x in result:
@@ -123,6 +133,7 @@ def argumentParser():
   parser.add_argument("-o", "--outputPath", type=pathlib.Path, default=None)
   parser.add_argument("-f", "--failedPath", type=pathlib.Path, default=None)
   parser.add_argument("-th", "--threshold", type=float, default=9.0)
+  parser.add_argument("-e", "--extensions", nargs="*", default=[".jpg", ".png", ".webp", ".gif"])
   args = parser.parse_args()
   path = args.path.absolute()
   if not path.exists():
@@ -132,16 +143,16 @@ def argumentParser():
   picklePath = pathlib.Path(path, f"pHash_{path.stem}.pkl") if args.outputPath is None else args.outputPath
   failedPath = pathlib.Path(path, f"failed_{path.stem}.pkl") if args.failedPath is None else args.failedPath
   targetPath = args.targetPath.absolute() if args.targetPath is not None else None
-  return (path, picklePath, failedPath, targetPath, args.threshold)
+  return (path, picklePath, failedPath, targetPath, args.threshold, args.extensions)
 
 
 if __name__ == "__main__":
-  path, picklePath, failedPath, targetPath, threshold = argumentParser()
-  print(f'directory:  "{path}"\nthreshold:   {threshold}')
-  print(f'picklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
+  path, picklePath, failedPath, targetPath, threshold, extensions = argumentParser()
+  print(f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"')
+  print(f'failedPath: "{failedPath}"\ntargetPath: "{targetPath}\nextensions: "{extensions}"')
 
   # comparePHash(path, failedPath, targetPath)
-  dumpSameImages(path, picklePath, failedPath, targetPath, threshold)
+  dumpSameImages(path, picklePath, failedPath, targetPath, threshold, extensions)
   rsip.printSameImagePickle(picklePath)
-  print(f'directory:  "{path}"\nthreshold:   {threshold}')
-  print(f'picklePath: "{picklePath}"\nfailedPath: "{failedPath}"\ntargetPath: "{targetPath}"')
+  print(f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"')
+  print(f'failedPath: "{failedPath}"\ntargetPath: "{targetPath}\nextensions: "{extensions}"')
