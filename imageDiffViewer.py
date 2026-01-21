@@ -127,7 +127,7 @@ class ImageDiffViewer(tk.Frame):
 
   def setFiles(self):
     if self.directory is not None:
-      self.paths = U.getFiles(self.directory, False, [".jpg", ".gif", ".webp", ".png"])
+      self.paths, _ = U.getFiles(self.directory, False, [".jpg", ".gif", ".webp", ".png"])
     self.countFile = len(self.paths)
 
   def resizeImage(self, image):
