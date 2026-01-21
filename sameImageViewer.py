@@ -320,10 +320,12 @@ class CanvasWindow(tk.Canvas):
     image = ImageTk.PhotoImage(image, master=canvas)
     self.thumbnails.append(image)
     canvas.create_image(self.thumbnailSize[0] // 2, self.thumbnailSize[1] // 2, image=image, anchor=tk.CENTER)
+    text = f"{parent}\n{data['path'].name}\n{data['shape']}\n{data.get('diff', '')}\n"
+    text += f"{self.master.dirs[data['path'].parent]['sames']} / {self.master.dirs[data['path'].parent]['total']}"
     canvas.create_text(
       5,
       30,
-      text=f"{parent}\n{data['path'].name}\n{data['shape']}\n{data.get('diff', '')}",
+      text=text,
       anchor=tk.NW,
       font=("fixed", 14, "bold"),
       fill=self.master.svColor.get(),
@@ -381,6 +383,8 @@ class SameImageViewer(ttk.Frame):
     self.data = []
     self.record = []
     self.directory = None
+    self.targetPath = None
+    self.dirs = {}
     self.countDataWidth = 0
     self.current = 0
     self.countData = 0
@@ -492,7 +496,6 @@ class SameImageViewer(ttk.Frame):
       U.hsvToRgbString([330, 0.6, 1.0]),
       U.hsvToRgbString([300, 0.6, 1.0]),
     ]
-
     self.style.configure("TButton", font=("BIZ UDゴシック", 10), padding=[0, 0, 0, 0])
     self.style.map(
       "G1.TButton",
@@ -554,7 +557,6 @@ class SameImageViewer(ttk.Frame):
         ("!pressed", "raised"),
       ],
     )
-
     colorCombobox = [
       U.hsvToRgbString([240, 0.3, 1.0]),
       U.hsvToRgbString([220, 0.3, 1.0]),
@@ -610,7 +612,10 @@ class SameImageViewer(ttk.Frame):
     self.pm = U.PickleManager(self.dumpFile)
     data = self.pm.loadExternal()
     self.directory = data[0]
-    self.data = data[1:]
+    self.targetPath = data[1]
+    self.extensions = data[2]
+    self.dirs = data[-1]
+    self.data = data[3:-1]
     self.countData = self.pm.count - 1
     self.countDataWidth = len(str(self.countData))
     maxImage = functools.reduce(max, map(len, self.data))
@@ -751,8 +756,8 @@ class SameImageViewer(ttk.Frame):
     if len(self.targets) < 1:
       return
     for indexData, indexFile in self.targets:
-      cmd = ["explorer", self.data[indexData][indexFile]["path"].parent]
-      subprocess.Popen(cmd)  # noqa: S603
+      path = str(self.data[indexData][indexFile]["path"].parent)
+      WinApi.openDirectory(path)
 
   def liftTop(self):
     self.master.attributes("-topmost", True)
@@ -771,8 +776,7 @@ class SameImageViewer(ttk.Frame):
     self.imageDiffViewer = imageDiffViewer.ImageDiffViewer(None, files, master=self.imageDiffViewerRoot)
 
   def openOutput(self, _event=None):
-    cmd = ["explorer", self.destination]
-    subprocess.Popen(cmd)  # noqa: S603
+    WinApi.openDirectory(str(self.destination))
 
   def changeGrid(self, *, one=False):
     if one:
