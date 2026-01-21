@@ -50,15 +50,18 @@ def getFiles(path, isRecurse, extensions=None):
   if isinstance(path, str):
     path = pathlib.Path(path)
   files = deque(path.iterdir())
+  dirs = {path: {"total": 0, "sames": 0}}
   result = []
   while len(files) > 0:
     file = files.popleft()
     if file.is_file() and (extensions is None or file.suffix in extensions):
       result.append({"path": file.absolute()})
+      dirs[file.parent]["total"] += 1
     elif file.is_dir() and isRecurse:
       files.extend(file.iterdir())
+      dirs[file] = {"total": 0, "sames": 0}
   result.sort(key=lambda x: x["path"])
-  return result
+  return result, dirs
 
 
 def comparePHash(ph1, ph2, phObj=None):
@@ -70,8 +73,8 @@ def comparePHash(ph1, ph2, phObj=None):
 def isSameImage(target, other, phObj=None, threshold=9.0):
   diff = comparePHash(target["pHash"], other["pHash"], phObj)
   if diff <= threshold:
-    return True, diff, other
-  return False, diff, other
+    return True, diff
+  return False, diff
 
 
 def getRatio(shape, n=4):
