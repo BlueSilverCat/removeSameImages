@@ -3,11 +3,13 @@ import math
 import pathlib
 from collections import deque
 
-import cv2
-import numpy as np
-from PIL import Image, ImageChops
+import ImageUtility as IU
 
 import Utility as U
+
+
+def toGeometry(width, height, left, top):
+  return f"{width}x{height}+{left}+{top}"
 
 
 def checkFileName(path, sep="#", width=2, *, isMakeDir=False):
@@ -25,23 +27,6 @@ def checkFileName(path, sep="#", width=2, *, isMakeDir=False):
     if not name.exists():
       return name
     i += 1
-
-
-def toGeometry(width, height, left, top):
-  return f"{width}x{height}+{left}+{top}"
-
-
-def resizeImage(image, width, height):
-  w, h = image.size
-  ratio = min(width / w, height / h)
-  size = (int(w * ratio), int(h * ratio))
-  return image.resize(size, Image.LANCZOS)
-
-
-def readImage(path):
-  if not path.is_file():
-    return None
-  return cv2.imdecode(np.fromfile(path, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
 
 
 def getFiles(path, isRecurse, extensions=None):
@@ -62,21 +47,15 @@ def getFiles(path, isRecurse, extensions=None):
   return result, dirs
 
 
-def comparePHash(ph1, ph2, phObj=None):
-  if phObj is None:
-    phObj = cv2.img_hash.PHash().create()
-  return phObj.compare(ph1, ph2)
+def isSameImage(target, other, threshold, phObj=None, matcher=None, diffRatio=0.2):
+  if phObj is not None:
+    diff = IU.comparePHash(target["pHash"], other["pHash"], phObj)
+  else:
+    diff = IU.compareDescriptor(matcher, target["descriptors"], other["descriptors"])
 
-
-def isSameImage(target, other, phObj=None, threshold=9.0):
-  diff = comparePHash(target["pHash"], other["pHash"], phObj)
-  if diff <= threshold:
+  if diff <= threshold and abs(IU.getRatio(target["shape"]) - IU.getRatio(other["shape"])) <= diffRatio:
     return True, diff
   return False, diff
-
-
-def getRatio(shape, n=4):
-  return round(shape[0] / shape[1], n)
 
 
 def factor(x):
@@ -126,26 +105,3 @@ def getMinFactorPair(n):
     fts = factor(n)
   result = getAllFactorPairs(fts)
   return result[-1]
-
-
-ColorModes = ["1", "L", "P", "RGB", "RGBA"]  # "CMYK", "YCvCr", "LAB", "HSV", "I", "F"
-
-
-def makeSameColor(image1, image2):
-  m1 = U.indexList(ColorModes, image1.mode)
-  m2 = U.indexList(ColorModes, image2.mode)
-  mode = ColorModes[max(m1, m2)]
-  return image1.convert(mode), image2.convert(mode)
-
-
-def diffImage(image1, image2):
-  size = max(image1.size, image2.size)
-  img1 = image1.resize(size, Image.LANCZOS) if image1.size != size else image1
-  img2 = image2.resize(size, Image.LANCZOS) if image2.size != size else image2
-  img1, img2 = makeSameColor(img1, img2)
-  return ImageChops.difference(img1, img2)
-
-
-# def callExplorer(params):
-#   cmd = ["explorer", *params]
-#   subprocess.Popen(cmd)
