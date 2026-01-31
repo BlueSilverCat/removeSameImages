@@ -1,12 +1,14 @@
 import argparse
 import concurrent.futures as cf
 import functools
+import operator
 import shutil
 import sys
 import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+import Decorator as D
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -190,9 +192,9 @@ class FrameCommand(ttk.Frame):
     self.labelColumn.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.spinboxRow.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.labelRow.pack(side=tk.RIGHT, fill=tk.BOTH)
-    self.buttonUncheckAll.pack(side=tk.RIGHT, fill=tk.BOTH)
-    self.labelTargetCount.pack(side=tk.RIGHT, fill=tk.BOTH)
     self.buttonCheckAll.pack(side=tk.RIGHT, fill=tk.BOTH)
+    self.labelTargetCount.pack(side=tk.RIGHT, fill=tk.BOTH)
+    self.buttonUncheckAll.pack(side=tk.RIGHT, fill=tk.BOTH)
 
     self.comboboxColor.pack(side=tk.LEFT, fill=tk.BOTH)
     self.buttonOutput.pack(side=tk.LEFT, fill=tk.BOTH)
@@ -202,11 +204,11 @@ class FrameCommand(ttk.Frame):
   def selectedSpinbox(self):
     self.spinboxRow.select_clear()
     self.spinboxColumn.select_clear()
-    self.master.draw()
+    self.master.draw(self.master.current)
 
   def selectedCombobox(self, _event):
     self.comboboxColor.select_clear()
-    self.master.draw(isAutoSize=True)
+    self.master.draw(self.master.current, isAutoSize=True)
 
   def changeButtonState(self):
     if len(self.master.targets) > 0:
@@ -243,8 +245,8 @@ class CanvasWindow(tk.Canvas):
   def setThumbnailSize(self):
     self.thumbnailSize = [self.width // self.master.ivColumn.get(), self.height // self.master.ivRow.get()]
 
-  def expandArea(self, num):
-    row = -(-num // self.master.ivColumn.get())
+  def expandArea(self):
+    row = -(-self.master.countImage // self.master.ivColumn.get())
     row -= self.master.ivRow.get()
     row = max(row, 0)
     appendSize = self.thumbnailSize[1] * row
@@ -272,10 +274,10 @@ class CanvasWindow(tk.Canvas):
     self.master.targets = []
     self.master.checkedWidgetIndices = []
 
-  def openImage(self, path):
-    if not path["path"].exists():
+  def openImage(self, data):
+    if not data["path"].exists():
       return None
-    image = Image.open(path["path"])
+    image = Image.open(data["path"])
     image.load()
     return u.resizeImage(image, *self.thumbnailSize)
 
@@ -283,18 +285,22 @@ class CanvasWindow(tk.Canvas):
     return list(self.executor.map(self.openImage, data, timeout=30))
 
   def createAllCanvas(self, files, dataIndex):
+    if len(files) < 1:
+      return
     images = self.openImages(files)
+    maxShape = max(file["shape"] for file in files)
+    i = 0
     row = 0
     column = 0
     self.checkValues = []
-    for i, file in enumerate(files):
+    for i, (file, image) in enumerate(zip(files, images, strict=True)):
       if i != 0 and i % self.master.ivColumn.get() == 0:
         row += 1
         column = 0
-      self.createCanvas(i, row, column, file, images[i], dataIndex)
+      self.executor.submit(self.createCanvas, i, row, column, file, image, dataIndex, maxShape)
       column += 1
 
-  def createCanvas(self, i, row, column, data, image, dataIndex):
+  def createCanvas(self, i, row, column, data, image, dataIndex, maxShape):
     if image is None:
       return
     canvas = tk.Canvas(
@@ -318,8 +324,15 @@ class CanvasWindow(tk.Canvas):
     )
     image = ImageTk.PhotoImage(image, master=canvas)
     self.thumbnails.append(image)
+    diffShape = U.calcElement(data["shape"], maxShape, operator.sub)
+    if diffShape == [0, 0, 0]:
+      diff = ""
+    else:
+      diff = diffShape
+      checkValue.set(True)
+      self.setTarget(checkValue, dataIndex, i)
     canvas.create_image(self.thumbnailSize[0] // 2, self.thumbnailSize[1] // 2, image=image, anchor=tk.CENTER)
-    text = f"{parent}\n{data['path'].name}\n{data['shape']}\n{data.get('diff', '')}\n"
+    text = f"{parent}\n{data['path'].name}\n{data['shape']} {diff}\n{data.get('diff', '')}\n"
     text += f"{self.master.dirs[data['path'].parent]['sames']} / {self.master.dirs[data['path'].parent]['total']}"
     canvas.create_text(
       5,
@@ -368,31 +381,41 @@ class CanvasWindow(tk.Canvas):
 class SameImageViewer(ttk.Frame):
   def __init__(self, dumpFilePath, outputPath, recordPath, master=None):
     super().__init__(master)
+    self.dumpFile = dumpFilePath
+    self.destination = outputPath.absolute()
+    self.recordPath = recordPath.absolute()
+    self.pm = None
+    self.directory = None
+    self.targetPath = None
+    self.extensions = []
+    self.dirs = {}
+    self.data = []
+    self.countData = 0
+    self.countDataWidth = 0
+    self.maxImageWidth = 0
+    self.record = []
+    self.executor = cf.ThreadPoolExecutor()
+
+    self.load()
+    if self.countData == 0:
+      print("no same files.")
+      self.master.destroy()
+      return
+
+    self.current = 0
+    self.countImage = 0
+    self.oldCountImage = -1
+    self.isAutoSize = True
+    self.imageDiffViewerRoot = None
+    self.imageDiffViewer = None
+
     self.resolution = WinApi.getDisplaysResolution()[0]  # (width, height)
     self.config(width=self.resolution[0], height=self.resolution[1])
     self.master.geometry(u.toGeometry(self.resolution[0], self.resolution[1], 0, 0))
     self.master.title("SameImageViewer")
     self.pack()
     self.master.wm_overrideredirect(True)
-
-    self.dumpFile = dumpFilePath
-    self.destination = outputPath.absolute()
-    self.recordPath = recordPath.absolute()
-    self.pm = None
-    self.data = []
-    self.record = []
-    self.directory = None
-    self.targetPath = None
-    self.dirs = {}
-    self.countDataWidth = 0
-    self.current = 0
-    self.countData = 0
-    self.countImage = 0
-    self.isAutoSize = True
-    self.imageDiffViewerRoot = None
-    self.imageDiffViewer = None
-
-    self.load()
+    # self.lock = threading.Lock()
 
     self.setStyle()
 
@@ -417,7 +440,7 @@ class SameImageViewer(ttk.Frame):
     self.placeWidgets()
     self.setBind()
     self.liftTop()
-    self.draw(isAutoSize=True)
+    self.draw(self.current, isAutoSize=True)
 
   def placeWidgets(self):
     self.frameCommand = FrameCommand(self)
@@ -573,7 +596,7 @@ class SameImageViewer(ttk.Frame):
     )
 
   def setBind(self):
-    self.master.bind("<Configure>", self.onOverRideRedirect)
+    self.master.bind("<Map>", self.onOverRideRedirect)
     # self.master.bind("<KeyPress-Escape>", lambda _event: self.frameTitle.buttonClose.invoke())
     self.master.bind("<MouseWheel>", self.scroll)
     self.master.bind("<KeyPress-Return>", lambda _event: self.frameCommand.buttonMove.invoke())
@@ -603,8 +626,8 @@ class SameImageViewer(ttk.Frame):
     self.master.bind("<KeyPress-q>", lambda _event: self.frameCommand.buttonUncheckAll.invoke())
     self.master.bind("<KeyPress-Delete>", lambda _event: self.frameCommand.buttonUncheckAll.invoke())
 
-  def onOverRideRedirect(self, _event):
-    if self.master.state() == "normal" and not self.master.wm_overrideredirect():
+  def onOverRideRedirect(self, event):
+    if event.widget == self.master and self.master.state() == "normal" and self.master.wm_overrideredirect() is None:
       self.master.wm_overrideredirect(True)
 
   def load(self):
@@ -615,7 +638,9 @@ class SameImageViewer(ttk.Frame):
     self.extensions = data[2]
     self.dirs = data[-1]
     self.data = data[3:-1]
-    self.countData = self.pm.count - 1
+    self.countData = len(self.data)
+    if self.countData == 0:
+      return
     self.countDataWidth = len(str(self.countData))
     maxImage = functools.reduce(max, map(len, self.data))
     self.maxImageWidth = len(str(maxImage))
@@ -627,33 +652,35 @@ class SameImageViewer(ttk.Frame):
     for dt in lt[:]:
       if not dt["path"].exists():
         self.data[i].remove(dt)
+    self.data[i] = U.naturalSorted(lt, key=lambda dt: dt["path"])
 
-  def checkData(self):  # sort?
-    data = (sorted(lt, key=lambda dt: dt["path"]) for lt in self.data)
-    with cf.ThreadPoolExecutor() as ex:
-      ex.map(self.deleteNotExists, enumerate(data), timeout=60)
-    self.data = list(filter(lambda x: len(x) > 1, self.data))
+  @D.printFuncInfo()
+  def checkData(self):
+    results = self.executor.map(self.deleteNotExists, enumerate(self.data), timeout=60)
+    list(results)
+    self.data = [lt for lt in self.data if len(lt) > 1]
+    self.data = U.naturalSorted(self.data)
     self.countData = len(self.data)
     self.countDataWidth = len(str(self.countData))
     self.countFile = sum(map(len, self.data))
     self.countFileWidth = len(str(self.countFile))
 
-  def draw(self, *, isAutoSize=False):
+  def draw(self, i, *, isAutoSize=False):
     self.canvasWindow.deleteAllWidgets()
     self.frameCommand.changeButtonState()
     if len(self.data) <= 0:
       self.countImage = 0
       self.canvasWindow.expandArea(0)
       return
-    self.countImage = len(self.data[self.current])
+    self.countImage = len(self.data[i])
     if isAutoSize:
       self.autoSetSize()
     self.canvasWindow.setThumbnailSize()
     self.updateTargetCount()
     self.updateRemainCount()
     self.updateRecordCount()
-    self.canvasWindow.expandArea(self.countImage)
-    self.canvasWindow.createAllCanvas(self.data[self.current], self.current)
+    self.canvasWindow.expandArea()
+    self.canvasWindow.createAllCanvas(self.data[i], i)
 
   def perform(self):
     self.canvasWindow.deleteWidgets()
@@ -669,7 +696,7 @@ class SameImageViewer(ttk.Frame):
       shutil.move(source, destination)
     self.targets = []
     self.deleteData()
-    self.draw(isAutoSize=True)
+    self.executor.submit(self.draw, self.current, isAutoSize=True)
 
   def deleteData(self):
     data = self.data[self.current]
@@ -691,7 +718,7 @@ class SameImageViewer(ttk.Frame):
       self.current += 1
     else:
       self.current = 0
-    self.draw(isAutoSize=True)
+    self.executor.submit(self.draw, self.current, isAutoSize=True)
 
   def previous(self):
     if self.countData < 1:
@@ -700,7 +727,7 @@ class SameImageViewer(ttk.Frame):
       self.current -= 1
     else:
       self.current = self.countData - 1
-    self.draw(isAutoSize=True)
+    self.executor.submit(self.draw, self.current, isAutoSize=True)
 
   def updateTargetCount(self):
     self.svTargetCount.set(f"{len(self.targets):0{self.maxImageWidth}}/{self.countImage:0{self.maxImageWidth}}")
@@ -717,7 +744,7 @@ class SameImageViewer(ttk.Frame):
     n = self.ivRow.get()
     x = max(minV, min(maxV, n + m))
     self.ivRow.set(x)
-    self.draw()
+    self.executor.submit(self.draw, self.current)
 
   def changeColumn(self, _event, m):
     minV = self.frameCommand.spinboxColumn.configure("from")[-1]
@@ -725,7 +752,7 @@ class SameImageViewer(ttk.Frame):
     n = self.ivColumn.get()
     x = max(minV, min(maxV, n + m))
     self.ivColumn.set(x)
-    self.draw()
+    self.executor.submit(self.draw, self.current)
 
   def writeRecord(self):  # 細かく書き込んだ方が安全
     mode = "a" if self.recordPath.exists() else "w"
@@ -738,25 +765,32 @@ class SameImageViewer(ttk.Frame):
       return
     data, indexData, _, destination = self.record.pop()  # _: indexFile
     self.data[indexData].append(data)
-    self.data[indexData].sort(key=lambda x: x["path"])
+    self.data[indexData] = U.naturalSorted(self.data[indexData], key=lambda x: x["path"])
+    print(f"Undo: {U.subPath(destination, self.directory)!s}\n -> {U.subPath(data['path'], self.directory)!s}")
     shutil.move(destination, data["path"])
-    self.draw(isAutoSize=True)
+    self.executor.submit(self.draw, self.current, isAutoSize=True)
 
   def autoSetSize(self):
     if not self.isAutoSize:
+      return
+    grid = self.ivRow.get(), self.ivColumn.get()
+    if self.countImage == self.oldCountImage and grid == self.grid:
       return
     row, column = u.getMinFactorPair(min(self.countImage, 100))
     if self.resolution[0] < self.resolution[1]:
       row, column = column, row
     self.ivRow.set(row)
     self.ivColumn.set(column)
+    self.oldCountImage = self.countImage
+    self.oldGrid = (row, column)
 
   def explorer(self):
     if len(self.targets) < 1:
       return
     for indexData, indexFile in self.targets:
-      path = str(self.data[indexData][indexFile]["path"].parent)
-      WinApi.openDirectory(path)
+      file = self.data[indexData][indexFile]["path"]
+      # WinApi.callSHOpenFolderAndSelectItems(str(file.parent), [str(file)])
+      self.executor.submit(WinApi.callSHOpenFolderAndSelectItems, str(file.parent), [str(file)])
 
   def liftTop(self):
     self.master.attributes("-topmost", True)
@@ -775,15 +809,15 @@ class SameImageViewer(ttk.Frame):
     self.imageDiffViewer = imageDiffViewer.ImageDiffViewer(None, files, master=self.imageDiffViewerRoot)
 
   def openOutput(self, _event=None):
-    WinApi.openDirectory(str(self.destination))
+    WinApi.callShellExecuteExW(str(self.destination))
 
   def changeGrid(self, *, one=False):
     if one:
       self.ivRow.set(1)
       self.ivColumn.set(1)
-      self.draw()
+      self.executor.submit(self.draw, self.current)
     else:
-      self.draw(isAutoSize=True)
+      self.executor.submit(self.draw, self.current, isAutoSize=True)
 
 
 def argumentParser():
@@ -812,5 +846,5 @@ if __name__ == "__main__":
   if len(gui.record) > 1:
     gui.writeRecord()
     print(f'dumpFilePath: "{dumpFilePath}"\noutputPath:   "{outputPath}"\nrecordPath:   "{recordPath}"')
-    u.callExplorer([outputPath])
-    u.callExplorer([recordPath])
+    WinApi.callShellExecuteExW(str(outputPath))
+    WinApi.callShellExecuteExW(str(recordPath))
