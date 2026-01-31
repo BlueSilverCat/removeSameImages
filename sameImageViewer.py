@@ -9,6 +9,7 @@ from pathlib import Path
 from tkinter import ttk
 
 import Decorator as D
+import ImageUtility as IU
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -279,7 +280,7 @@ class CanvasWindow(tk.Canvas):
       return None
     image = Image.open(data["path"])
     image.load()
-    return u.resizeImage(image, *self.thumbnailSize)
+    return IU.resizeImage(image, *self.thumbnailSize)
 
   def openImages(self, data):
     return list(self.executor.map(self.openImage, data, timeout=30))
