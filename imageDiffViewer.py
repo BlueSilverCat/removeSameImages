@@ -1,10 +1,13 @@
 import argparse
 import concurrent.futures as cf
 import itertools
+import operator
 import pathlib
 import tkinter as tk
 from tkinter import ttk
 
+import Decorator as D
+import ImageUtility as IU
 import WindowsApi as WinApi
 from PIL import Image, ImageTk
 
@@ -88,7 +91,7 @@ class ImageDiffViewer(tk.Frame):
     self.drawImage()
 
   def setBinds(self):
-    self.master.bind("<Configure>", self.onOverRideRedirect)
+    self.master.bind("<Map>", self.onOverRideRedirect)
     self.master.bind("<KeyPress-Right>", self.next)
     self.master.bind("<KeyPress-Left>", self.previous)
     self.master.bind("<KeyPress-Escape>", self.destroyAll)
@@ -131,9 +134,14 @@ class ImageDiffViewer(tk.Frame):
     self.countFile = len(self.paths)
 
   def resizeImage(self, image):
-    return u.resizeImage(image, self.canvasSize[0] // 3, self.canvasSize[1]), image.size
+    return IU.resizeImage(image, self.canvasSize[0] // 3, self.canvasSize[1]), (
+      image.size[1],
+      image.size[0],
+    )  # cv2に合わせる
 
   def openImage(self, path):
+    if not path.exists():
+      return None
     image = Image.open(path)
     image.load()
     return image
@@ -143,14 +151,15 @@ class ImageDiffViewer(tk.Frame):
     return (
       i,
       j,
-      u.resizeImage(u.diffImage(self.images[i], self.images[j]), self.canvasSize[0] // 3, self.canvasSize[1]),
+      IU.resizeImage(IU.diffImage(self.images[i], self.images[j]), self.canvasSize[0] // 3, self.canvasSize[1]),
     )
 
+  @D.printFuncInfo()
   def readImages(self):
     indices = itertools.combinations(range(self.countFile), r=2)
     with cf.ThreadPoolExecutor() as ex:
       results = ex.map(self.openImage, self.paths, timeout=60)
-      self.images = list(results)
+      self.images = list(filter(lambda x: x is not None, results))
       results = ex.map(self.getImageDiff, indices, timeout=180)
       self.data = list(results)
       results = ex.map(self.resizeImage, self.images, timeout=60)
@@ -176,11 +185,14 @@ class ImageDiffViewer(tk.Frame):
       x = width // 2 + i * width
       self.canvas.create_image(x, self.canvasSize[1] // 2, image=image, anchor=tk.CENTER)
       sizes.append(size)
+    maxSize = max(sizes[:-1])  # 末尾にdiffImageのsize=0が入っているので抜かす
     for i, n in enumerate(index):
+      diffSize = U.calcElement(sizes[i], maxSize, operator=operator.sub)
+      diff = "" if diffSize == [0, 0] else diffSize
       self.canvas.create_text(
         i * width + 5,
         0,
-        text=f"{self.paths[n].parent.name}\n{self.paths[n].name}\n{sizes[i]}",
+        text=f"{self.paths[n].parent.name}\n{self.paths[n].name}\n{sizes[i]} {diff}",
         anchor=tk.NW,
         font=("BIZ UDゴシック", 16, "bold"),
         fill="red",
@@ -210,8 +222,8 @@ class ImageDiffViewer(tk.Frame):
       self.current = self.countImages - 1
     self.drawImage()
 
-  def onOverRideRedirect(self, _event):
-    if self.master.state() == "normal" and not self.master.wm_overrideredirect():
+  def onOverRideRedirect(self, event):
+    if event.widget == self.master and self.master.state() == "normal" and self.master.wm_overrideredirect() is None:
       self.master.wm_overrideredirect(True)
 
   def liftTop(self):
