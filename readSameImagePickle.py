@@ -73,7 +73,7 @@ def printDirectoryPair(data):
     targetPath = lt[0]["path"].parent
     oldPath = ""
     work = {}
-    for i, dt in enumerate(lt[1:]):
+    for _, dt in enumerate(lt[1:]):
       if oldPath != dt["path"].parent:
         work.update({(targetPath, dt["path"].parent): [lt[0], dt]})
       else:
