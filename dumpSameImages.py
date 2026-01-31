@@ -1,11 +1,16 @@
 import argparse
 import concurrent.futures as cf
+import functools
 import pathlib
 import pickle
 import sys
 import threading
+import time
 
 import cv2
+import Decorator as D
+import ImageUtility as IU
+import TimeUtility as TU
 
 import readSameImagePickle as rsip
 import Utility as U
@@ -27,17 +32,23 @@ def getFiles(path, targetPath, extensions=None):
   return targets, others, dirs
 
 
-def setInfo(data):
-  image = u.readImage(data["path"])
+def setInfo(data, detector):
+  image = IU.readImage(data["path"])
   if image is None:
     return False, data
   data["shape"] = image.shape
   data["pHash"] = cv2.img_hash.pHash(image)
+  if detector is not None:
+    _keyPoints, descriptors = detector.detectAndCompute(image, None)
+    if descriptors is None:
+      return False, data
+    data["descriptors"] = descriptors
   return True, data
 
 
-def setInfoAll(lt, ex, fails):
-  rs = ex.map(setInfo, lt)
+def setInfoAll(lt, ex, fails, detector):
+  func = functools.partial(setInfo, detector=detector)
+  rs = ex.map(func, lt)
   for result in rs:
     success, data = result
     if not success:
@@ -54,6 +65,7 @@ def check(result, other, sames, others, fails, dirs):
   isSame, diff = result
   if isSame:
     others.remove(other)
+    U.delKeys(other, ["descriptors", "pHash"])
     other["diff"] = diff
     sames.append(other)
     dirs[other["path"].parent]["sames"] += 1
@@ -62,29 +74,58 @@ def check(result, other, sames, others, fails, dirs):
     fails.append(other["path"])
 
 
-def dumpSameImages(path, pickleOutput, failedPath, targetPath=None, threshold=9.0, extensions=None):
+def getDetector(method):
+  match method:
+    case "pHash":
+      return cv2.img_hash.PHash().create(), None, None
+    case "AKAZE(MLDB)":  # 高速?
+      return (
+        None,
+        cv2.AKAZE_create(cv2.AKAZE_DESCRIPTOR_MLDB_UPRIGHT),
+        cv2.BFMatcher_create(cv2.NORM_HAMMING, crossCheck=True),
+      )
+    case "AKAZE(KAZE)":  # 詳細
+      return (
+        None,
+        cv2.AKAZE_create(cv2.AKAZE_DESCRIPTOR_KAZE_UPRIGHT),
+        cv2.BFMatcher_create(cv2.NORM_L2, crossCheck=True),
+      )
+    case "KAZE":
+      return None, cv2.KAZE_create(upright=True), cv2.BFMatcher(cv2.NORM_L2, crossCheck=True)
+    case "ORB":
+      return None, cv2.ORB_create(), cv2.BFMatcher_create(cv2.NORM_HAMMING, crossCheck=True)
+
+
+@D.printFuncInfo()
+def dumpSameImages(path, pickleOutput, failedPath, method, threshold, targetPath=None, extensions=None):
   pm = U.PickleManager(pickleOutput)
   pm.dump(path)
   pm.dump(targetPath)
   pm.dump(extensions)
+
   targets, others, dirs = getFiles(path, targetPath, extensions)
-  lock = threading.Lock()
-  phObj = cv2.img_hash.PHash().create()
+  phObj, detector, matcher = getDetector(method)
+
   fails = []
+  lock = threading.Lock()
   with cf.ThreadPoolExecutor() as ex:
-    print("Calculate pHash...")
-    setInfoAll(targets, ex, fails)
+    start = time.perf_counter()
+    U.printTime("Calculating ...")
+    setInfoAll(targets, ex, fails, detector)
     if targetPath is not None:
-      setInfoAll(others, ex, fails)
+      setInfoAll(others, ex, fails, detector)
+    sec = time.perf_counter() - start
+    U.printTime(TU.getTimeStr(sec), f"({sec:10.6f})")
+
     while len(targets) > 0:
       target = targets.pop()
       target["target"] = True
       sames = [target]
       print(f"\r\x1b[1M{len(others)}: {target['path'].parent.name} {target['path'].name}", end="")
       for other in others[:]:
-        r = u.isSameImage(target, other, phObj, threshold)
+        r = u.isSameImage(target, other, threshold, phObj, matcher)
         check(r, other, sames, others, fails, dirs)
-      U.delKeys(target, ["pHash"])
+      U.delKeys(target, ["descriptors", "pHash"])
       if len(sames) > 1:
         dirs[target["path"].parent]["sames"] += 1
         ex.submit(dump, pm, sames, lock)
@@ -107,9 +148,9 @@ def comparePHash(path, failedPath, targetPath=None, extensions=None):
   fails = []
   result = []
   with cf.ThreadPoolExecutor() as ex:
-    setInfoAll(targets, ex, fails)
+    setInfoAll(targets, ex, fails, None)
     if targetPath is not None:
-      setInfoAll(others, ex, fails)
+      setInfoAll(others, ex, fails, None)
     while len(targets) > 0:
       target = targets.pop()
       target["target"] = True
@@ -120,10 +161,22 @@ def comparePHash(path, failedPath, targetPath=None, extensions=None):
     print(f"fails: {fails}")
     with failedPath.open("wb") as file:
       pickle.dump(fails, file)
-  print(path)
-  print(targetPath)
   for x in result:
-    print(f"{x[2]:5}: {U.subPath(x[0], targetPath)} {U.subPath(x[1], path)}")
+    print(f"{x[2]:5}: \n{x[0]}\n{x[1]}\n")
+
+
+def setThreshold(method):
+  match method:
+    case "pHash":
+      return 4.0
+    case "AKAZE(MLDB)":  # 高速
+      return 16.0
+    case "AKAZE(KAZE)":  # 詳細
+      return 0.04
+    case "KAZE":
+      return 0.04
+    case "ORB":
+      return 30.0
 
 
 def argumentParser():
@@ -132,7 +185,8 @@ def argumentParser():
   parser.add_argument("-t", "--targetPath", type=pathlib.Path, default=None)
   parser.add_argument("-o", "--outputPath", type=pathlib.Path, default=None)
   parser.add_argument("-f", "--failedPath", type=pathlib.Path, default=None)
-  parser.add_argument("-th", "--threshold", type=float, default=9.0)
+  parser.add_argument("-m", "--method", choices=["pHash", "AKAZE(MLDB)", "AKAZE(KAZE)", "KAZE", "ORB"], default="pHash")
+  parser.add_argument("-th", "--threshold", type=float, default=None)
   parser.add_argument("-e", "--extensions", nargs="*", default=[".jpg", ".png", ".webp", ".gif"])
   args = parser.parse_args()
   path = args.path.absolute()
@@ -140,19 +194,33 @@ def argumentParser():
     print(f'"{path}" does not exist.')
     sys.exit()
 
+  method = args.method
+  threshold = args.threshold
+  if threshold is None:
+    threshold = setThreshold(method)
+
   picklePath = pathlib.Path(path, f"pHash_{path.stem}.pkl") if args.outputPath is None else args.outputPath
   failedPath = pathlib.Path(path, f"failed_{path.stem}.pkl") if args.failedPath is None else args.failedPath
   targetPath = args.targetPath.absolute() if args.targetPath is not None else None
-  return (path, picklePath, failedPath, targetPath, args.threshold, args.extensions)
+  return (path, picklePath, failedPath, targetPath, method, threshold, args.extensions)
+
+
+def printArgs(path, picklePath, failedPath, targetPath, method, threshold, extensions):
+  print(f'directory:  "{path}"')
+  print(f"method:      {method}")
+  print(f"threshold:   {threshold}")
+  print(f'picklePath: "{picklePath}"')
+  print(f'failedPath: "{failedPath}"')
+  print(f'targetPath: "{targetPath}"')
+  print(f'extensions: "{extensions}"\n')
 
 
 if __name__ == "__main__":
-  path, picklePath, failedPath, targetPath, threshold, extensions = argumentParser()
-  print(f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"')
-  print(f'failedPath: "{failedPath}"\ntargetPath: "{targetPath}\nextensions: "{extensions}"')
+  path, picklePath, failedPath, targetPath, method, threshold, extensions = argumentParser()
+  printArgs(path, picklePath, failedPath, targetPath, method, threshold, extensions)
 
   # comparePHash(path, failedPath, targetPath)
-  dumpSameImages(path, picklePath, failedPath, targetPath, threshold, extensions)
+  dumpSameImages(path, picklePath, failedPath, method, threshold, targetPath, extensions)
+
   rsip.printSameImagePickle(picklePath)
-  print(f'directory:  "{path}"\nthreshold:   {threshold}\npicklePath: "{picklePath}"')
-  print(f'failedPath: "{failedPath}"\ntargetPath: "{targetPath}\nextensions: "{extensions}"')
+  printArgs(path, picklePath, failedPath, targetPath, method, threshold, extensions)
